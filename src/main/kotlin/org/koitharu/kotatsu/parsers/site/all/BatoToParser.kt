@@ -1,9 +1,12 @@
 package org.koitharu.kotatsu.parsers.site.all
 
 import androidx.collection.ArraySet
+import okhttp3.Interceptor
+import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.nodes.Element
+import org.koitharu.kotatsu.parsers.Broken
 import org.koitharu.kotatsu.parsers.MangaLoaderContext
 import org.koitharu.kotatsu.parsers.MangaParserAuthProvider
 import org.koitharu.kotatsu.parsers.MangaSourceParser
@@ -15,21 +18,99 @@ import org.koitharu.kotatsu.parsers.util.*
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 import java.util.*
+import java.util.concurrent.TimeUnit
 import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
+@Broken("Need some tests")
 @MangaSourceParser("BATOTO", "Bato.To")
 internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 	context = context,
 	source = MangaParserSource.BATOTO,
 	pageSize = 60,
 	searchPageSize = 20,
-), MangaParserAuthProvider {
+), MangaParserAuthProvider, Interceptor {
+
+	override val configKeyDomain = ConfigKey.Domain(
+		"bato.to",
+		"batocomic.com",
+		"batocomic.net",
+		"batocomic.org",
+		"batotoo.com",
+		"batotwo.com",
+		"battwo.com",
+		"comiko.net",
+		"comiko.org",
+		"mangatoto.com",
+		"mangatoto.net",
+		"mangatoto.org",
+		"readtoto.com",
+		"readtoto.net",
+		"readtoto.org",
+		"dto.to",
+		"hto.to",
+		"mto.to",
+		"wto.to",
+		"xbato.com",
+		"xbato.net",
+		"xbato.org",
+		"zbato.com",
+		"zbato.net",
+		"zbato.org",
+		"fto.to",
+		"jto.to",
+	)
 
 	override fun onCreateConfig(keys: MutableCollection<ConfigKey<*>>) {
 		super.onCreateConfig(keys)
 		keys.add(userAgentKey)
+	}
+
+	// Interceptor with Fallback Logic
+	override fun intercept(chain: Interceptor.Chain): Response {
+		val request = chain.request()
+		val response = chain.proceed(request)
+
+		if (response.isSuccessful) return response
+
+		val urlString = request.url.toString()
+
+		// Close the failed response body to prevent leaks
+		response.close()
+
+		// Check if this is an image server URL
+		if (SERVER_PATTERN.containsMatchIn(urlString)) {
+			for (server in FALLBACK_SERVERS) {
+				val newUrl = urlString.replace(SERVER_PATTERN, "https://$server")
+
+				// Skip if we are about to try the exact same URL that just failed
+				if (newUrl == urlString) continue
+
+				val newRequest = request.newBuilder()
+					.url(newUrl)
+					.build()
+
+				try {
+					// Force short timeouts for fallbacks to avoid long hangs
+					val newResponse = chain
+						.withConnectTimeout(5, TimeUnit.SECONDS)
+						.withReadTimeout(10, TimeUnit.SECONDS)
+						.proceed(newRequest)
+
+					if (newResponse.isSuccessful) {
+						return newResponse
+					}
+					// If this server also failed, close and loop to the next one
+					newResponse.close()
+				} catch (_: Exception) {
+					// Connection error on this mirror, ignore and loop to next
+				}
+			}
+		}
+
+		// If everything failed, re-run original request to return the standard error
+		return chain.proceed(request)
 	}
 
 	override val authUrl: String
@@ -94,36 +175,6 @@ internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 		),
 	)
 
-	override val configKeyDomain = ConfigKey.Domain(
-		"bato.to",
-		"batocomic.com",
-		"batocomic.net",
-		"batocomic.org",
-		"batotoo.com",
-		"batotwo.com",
-		"battwo.com",
-		"comiko.net",
-		"comiko.org",
-		"mangatoto.com",
-		"mangatoto.net",
-		"mangatoto.org",
-		"readtoto.com",
-		"readtoto.net",
-		"readtoto.org",
-		"dto.to",
-		"hto.to",
-		"mto.to",
-		"wto.to",
-		"xbato.com",
-		"xbato.net",
-		"xbato.org",
-		"zbato.com",
-		"zbato.net",
-		"zbato.org",
-		"fto.to",
-		"jto.to",
-	)
-
 	override suspend fun getListPage(page: Int, order: SortOrder, filter: MangaListFilter): List<Manga> {
 		when {
 			!filter.query.isNullOrEmpty() -> {
@@ -131,7 +182,6 @@ internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 			}
 
 			else -> {
-
 				val url = buildString {
 					append("https://")
 					append(domain)
@@ -171,7 +221,6 @@ internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 						} else {
 							append(it.language)
 						}
-
 					}
 
 					filter.originalLocale?.let {
@@ -453,6 +502,16 @@ internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 			if (ivLength > 0) {
 				generatedData.copyOfRange(keyLength, keyLength + ivLength)
 			} else byteArrayOf(),
+		)
+	}
+
+	// Fallback constants (Ported from Tachiyomi)
+	companion object {
+		private val SERVER_PATTERN = Regex("https://[a-zA-Z]\\d{2}")
+		// Sorted list: Most reliable servers FIRST
+		private val FALLBACK_SERVERS = listOf(
+			"k03", "k06", "k07", "k00", "k01", "k02", "k04", "k05", "k08", "k09",
+			"n03", "n00", "n01", "n02", "n04", "n05", "n06", "n07", "n08", "n09", "n10"
 		)
 	}
 }
