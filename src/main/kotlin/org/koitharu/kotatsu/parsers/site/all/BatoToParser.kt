@@ -6,7 +6,6 @@ import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import org.jsoup.nodes.Element
-import org.koitharu.kotatsu.parsers.Broken
 import org.koitharu.kotatsu.parsers.MangaLoaderContext
 import org.koitharu.kotatsu.parsers.MangaParserAuthProvider
 import org.koitharu.kotatsu.parsers.MangaSourceParser
@@ -23,7 +22,6 @@ import javax.crypto.Cipher
 import javax.crypto.spec.IvParameterSpec
 import javax.crypto.spec.SecretKeySpec
 
-@Broken("Need some tests")
 @MangaSourceParser("BATOTO", "Bato.To")
 internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 	context = context,
@@ -33,11 +31,11 @@ internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 ), MangaParserAuthProvider, Interceptor {
 
 	override val configKeyDomain = ConfigKey.Domain(
+		"batotoo.com",
 		"bato.to",
 		"batocomic.com",
 		"batocomic.net",
 		"batocomic.org",
-		"batotoo.com",
 		"batotwo.com",
 		"battwo.com",
 		"comiko.net",
@@ -70,46 +68,39 @@ internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 	// Interceptor with Fallback Logic
 	override fun intercept(chain: Interceptor.Chain): Response {
 		val request = chain.request()
+		val url = request.url.toString()
 		val response = chain.proceed(request)
+		if (response.isSuccessful ||
+			!SERVER_PATTERN.containsMatchIn(url)) {
+			return response
+		}
 
-		if (response.isSuccessful) return response
-
-		val urlString = request.url.toString()
-
-		// Close the failed response body to prevent leaks
 		response.close()
 
-		// Check if this is an image server URL
-		if (SERVER_PATTERN.containsMatchIn(urlString)) {
-			for (server in FALLBACK_SERVERS) {
-				val newUrl = urlString.replace(SERVER_PATTERN, "https://$server")
+		for (server in FALLBACK_SERVERS) {
+			val newUrl = url.replace(SERVER_PATTERN, "https://$server")
+			if (newUrl == url) continue
 
-				// Skip if we are about to try the exact same URL that just failed
-				if (newUrl == urlString) continue
+			val newRequest = request.newBuilder()
+				.url(newUrl)
+				.build()
 
-				val newRequest = request.newBuilder()
-					.url(newUrl)
-					.build()
+			try {
+				val fallbackResponse = chain
+					.withConnectTimeout(5, TimeUnit.SECONDS)
+					.withReadTimeout(10, TimeUnit.SECONDS)
+					.proceed(newRequest)
 
-				try {
-					// Force short timeouts for fallbacks to avoid long hangs
-					val newResponse = chain
-						.withConnectTimeout(5, TimeUnit.SECONDS)
-						.withReadTimeout(10, TimeUnit.SECONDS)
-						.proceed(newRequest)
-
-					if (newResponse.isSuccessful) {
-						return newResponse
-					}
-					// If this server also failed, close and loop to the next one
-					newResponse.close()
-				} catch (_: Exception) {
-					// Connection error on this mirror, ignore and loop to next
+				if (fallbackResponse.isSuccessful) {
+					return fallbackResponse
 				}
+
+				fallbackResponse.close()
+			} catch (_: Exception) {
+				// Ignore
 			}
 		}
 
-		// If everything failed, re-run original request to return the standard error
 		return chain.proceed(request)
 	}
 
@@ -316,12 +307,12 @@ internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 				?: script.parseFailed("Cannot find batoPass")
 			val batoWord = scriptSrc.substringBetweenFirst("batoWord =", ";")?.trim(' ', '"', '\n')
 				?: script.parseFailed("Cannot find batoWord")
-			val password = context.evaluateJs(batoPass)?.removeSurrounding('"')
+			val password = context.evaluateJs("about:blank", batoPass)?.removeSurrounding('"')
 				?: script.parseFailed("Cannot evaluate batoPass")
 			val args = JSONArray(decryptAES(batoWord, password))
 			val result = ArrayList<MangaPage>(images.length())
 			repeat(images.length()) { i ->
-				val url = images.getString(i)
+				val url = images.getString(i).replace("https://k", "https://n")
 				result += MangaPage(
 					id = generateUid(url),
 					url = if (args.length() == 0) url else url + "?" + args.getString(i),
@@ -510,8 +501,8 @@ internal class BatoToParser(context: MangaLoaderContext) : PagedMangaParser(
 		private val SERVER_PATTERN = Regex("https://[a-zA-Z]\\d{2}")
 		// Sorted list: Most reliable servers FIRST
 		private val FALLBACK_SERVERS = listOf(
-			"k03", "k06", "k07", "k00", "k01", "k02", "k04", "k05", "k08", "k09",
-			"n03", "n00", "n01", "n02", "n04", "n05", "n06", "n07", "n08", "n09", "n10"
+			"n03", "n00", "n01", "n02", "n04", "n05", "n06", "n07", "n08", "n09", "n10",
+			"k03", "k06", "k07", "k00", "k01", "k02", "k04", "k05", "k08", "k09"
 		)
 	}
 }
