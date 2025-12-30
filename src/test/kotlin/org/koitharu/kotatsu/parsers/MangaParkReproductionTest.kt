@@ -25,6 +25,19 @@ internal class MangaParkReproductionTest {
         val manga = list.first()
         println("Checking details for: ${manga.title}")
         val details = parser.getDetails(manga)
-        assert(details.chapters?.isNotEmpty() == true) { "Chapters are empty for ${manga.title}" }
+        val chapters = details.chapters
+        assert(chapters?.isNotEmpty() == true) { "Chapters are empty for ${manga.title}" }
+
+        // Test fetching pages for the first chapter
+        val firstChapter = chapters!!.first()
+        println("Checking pages for chapter: ${firstChapter.title}")
+        val pages = parser.getPages(firstChapter)
+        assert(pages.isNotEmpty()) { "Pages are empty for chapter ${firstChapter.title}" }
+        
+        // Test fetching image URL for the first page
+        val firstPage = pages.first()
+        val imageUrl = parser.getPageUrl(firstPage)
+        assert(imageUrl.isNotEmpty()) { "Image URL is empty for the first page" }
+        println("Successfully fetched image URL: $imageUrl")
     }
 }
