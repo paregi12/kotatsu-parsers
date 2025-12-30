@@ -53,7 +53,6 @@ internal class MangaPark(context: MangaLoaderContext) :
         try {
             return JSONObject(bodyText)
         } catch (e: Exception) {
-            System.err.println("MangaPark JSON Parse Error. Body: $bodyText")
             if (bodyText.trim().startsWith("[")) {
                 throw Exception("Expected JSON Object but got Array: $bodyText")
             }
