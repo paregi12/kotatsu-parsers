@@ -234,7 +234,7 @@ internal class BatoToV4Parser(context: MangaLoaderContext) :
 	}
 
 	private suspend fun graphQLQuery(endpoint: String, query: String, variables: JSONObject): JSONObject {
-		return webClient.graphQLQuery(endpoint, query, getRequestHeaders())
+		return webClient.graphQLQuery(endpoint, query, variables, getRequestHeaders())
 	}
 
 	private fun parseManga(json: JSONObject): Manga {
