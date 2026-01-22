@@ -9,7 +9,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
-import org.koitharu.kotatsu.parsers.Broken
 import org.koitharu.kotatsu.parsers.MangaLoaderContext
 import org.koitharu.kotatsu.parsers.MangaSourceParser
 import org.koitharu.kotatsu.parsers.config.ConfigKey
@@ -22,17 +21,14 @@ import org.koitharu.kotatsu.parsers.util.json.*
 import java.util.*
 import java.util.concurrent.TimeUnit
 
-@Broken("Original site closed")
-@MangaSourceParser("BATOTOV4", "Bato.To v4")
-internal class BatoToV4Parser(context: MangaLoaderContext) :
-	PagedMangaParser(context, MangaParserSource.BATOTOV4, 36) {
+internal abstract class BatoParser(
+	context: MangaLoaderContext,
+	source: MangaParserSource,
+	domain: String,
+	pageSize: Int = 36,
+) : PagedMangaParser(context, source, pageSize) {
 
-	override val configKeyDomain = ConfigKey.Domain(
-		"bato.si",
-		"battwo.com",
-		"bato.to",
-		"bato.ing"
-	)
+	override val configKeyDomain = ConfigKey.Domain(domain)
 
 	override val userAgentKey = ConfigKey.UserAgent(UserAgents.CHROME_DESKTOP)
 
@@ -633,4 +629,26 @@ internal class BatoToV4Parser(context: MangaLoaderContext) :
 			}
 		""".trimIndent()
 	}
+}
+
+@MangaSourceParser("BATOTOV4", "Bato.To v4")
+internal class BatoToV4Parser(context: MangaLoaderContext):
+	BatoParser(context, MangaParserSource.BATOTOV4, "bato.si") {
+
+	override val configKeyDomain = ConfigKey.Domain(
+		"bato.si",
+		"battwo.com",
+		"bato.to",
+		"bato.ing",
+	)
+}
+
+@MangaSourceParser("XBATCAT", "XBatCat")
+internal class XBatCatParser(context: MangaLoaderContext):
+	BatoParser(context, MangaParserSource.XBATCAT, "xbat.si") {
+
+	override val configKeyDomain = ConfigKey.Domain(
+		"xbat.si",
+		"xbat.tv",
+	)
 }
