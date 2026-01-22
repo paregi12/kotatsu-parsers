@@ -1,4 +1,4 @@
-package org.koitharu.kotatsu.parsers.site.all
+package org.koitharu.kotatsu.parsers.site.all.bato
 
 import androidx.collection.ArraySet
 import okhttp3.Interceptor
