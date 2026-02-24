@@ -8,7 +8,6 @@ import org.koitharu.kotatsu.parsers.MangaSourceParser
 import org.koitharu.kotatsu.parsers.config.ConfigKey
 import org.koitharu.kotatsu.parsers.core.PagedMangaParser
 import org.koitharu.kotatsu.parsers.model.*
-import org.koitharu.kotatsu.parsers.network.OkHttpWebClient
 import org.koitharu.kotatsu.parsers.network.UserAgents
 import org.koitharu.kotatsu.parsers.util.*
 import org.koitharu.kotatsu.parsers.util.json.asTypedList
@@ -30,13 +29,6 @@ internal class WeebDex(context: MangaLoaderContext) :
 	private val cdnDomain = "srv.notdelta.xyz"
 	override val configKeyDomain = ConfigKey.Domain("weebdex.org")
 	override val userAgentKey = ConfigKey.UserAgent(UserAgents.KOTATSU)
-
-	override val webClient = OkHttpWebClient(
-		context.httpClient.newBuilder()
-			.rateLimit(5)
-			.build(),
-		source,
-	)
 
 	private val preferredCoverServerKey = ConfigKey.PreferredImageServer(
 		presetValues = mapOf(
